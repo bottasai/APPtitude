@@ -1,0 +1,480 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>APPtitude - Mental Math Practice</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            line-height: 1.6;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background-color: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+        }
+        
+        h1 {
+            color: #333;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        
+        .level-selector {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        
+        select {
+            padding: 10px;
+            font-size: 16px;
+            margin-right: 10px;
+            border-radius: 5px;
+            border: 1px solid #ddd;
+        }
+        
+        .timer {
+            text-align: center;
+            font-size: 24px;
+            margin: 20px 0;
+            font-weight: bold;
+            color: #666;
+        }
+        
+        .progress {
+            text-align: center;
+            margin-bottom: 20px;
+            color: #666;
+        }
+        
+        .question-container {
+            margin-bottom: 20px;
+            padding: 20px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        
+        .question {
+            font-size: 18px;
+            margin-bottom: 20px;
+            line-height: 1.4;
+        }
+        
+        .answer-input {
+            width: 100%;
+            padding: 10px;
+            font-size: 16px;
+            margin-bottom: 20px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            box-sizing: border-box;
+        }
+        
+        .button-container {
+            display: flex;
+            justify-content: space-between;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        
+        button {
+            padding: 10px 20px;
+            font-size: 16px;
+            cursor: pointer;
+            border: none;
+            border-radius: 5px;
+            transition: background-color 0.3s;
+        }
+        
+        .start-btn {
+            background-color: #4CAF50;
+            color: white;
+            width: 200px;
+            margin: 0 auto;
+            display: block;
+        }
+        
+        .start-btn:hover {
+            background-color: #45a049;
+        }
+        
+        .submit-btn {
+            background-color: #2196F3;
+            color: white;
+            flex: 1;
+        }
+        
+        .submit-btn:hover {
+            background-color: #1e87dc;
+        }
+        
+        .skip-btn {
+            background-color: #ff9800;
+            color: white;
+            flex: 1;
+        }
+        
+        .skip-btn:hover {
+            background-color: #e68900;
+        }
+        
+        .next-btn {
+            background-color: #4CAF50;
+            color: white;
+            padding: 10px 20px;
+            margin-top: 15px;
+            display: none;
+        }
+        
+        .next-btn:hover {
+            background-color: #45a049;
+        }
+        
+        button:disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
+        }
+        
+        .feedback {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 5px;
+            display: none;
+        }
+        
+        .feedback.correct {
+            background-color: #dff0d8;
+            border: 1px solid #d6e9c6;
+            color: #3c763d;
+            display: block;
+        }
+        
+        .feedback.incorrect {
+            background-color: #f2dede;
+            border: 1px solid #ebccd1;
+            color: #a94442;
+            display: block;
+        }
+        
+        #end-screen {
+            text-align: center;
+        }
+        
+        #final-score, #final-time {
+            font-size: 20px;
+            margin: 10px 0;
+            color: #333;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Welcome to APPtitude</h1>
+        <p>Improve your mental math skills with adaptive practice!</p>
+        
+        <div id="start-screen">
+            <div class="level-selector">
+                <select id="level-select">
+                    <option value="1">Level 1 (Easy)</option>
+                    <option value="2">Level 2</option>
+                    <option value="3">Level 3</option>
+                    <option value="4">Level 4</option>
+                    <option value="5">Level 5 (Hard)</option>
+                </select>
+                <button id="start-btn" class="start-btn">Start Test</button>
+            </div>
+        </div>
+        
+        <div id="test-screen" style="display: none;">
+            <div class="timer" id="timer">00:00</div>
+            <div class="progress" id="progress"></div>
+            <div class="question-container">
+                <div class="question" id="question-text"></div>
+                <input type="text" class="answer-input" id="answer-input" placeholder="Enter your answer...">
+                <div class="button-container">
+                    <button class="submit-btn" id="submit-btn">Submit</button>
+                    <button class="skip-btn disabled" id="skip-btn" disabled>Skip</button>
+                </div>
+                <div class="feedback" id="feedback"></div>
+                <button class="next-btn" id="next-btn" style="display: none;">Next</button>
+            </div>
+        </div>
+        
+        <div id="end-screen" style="display: none;">
+            <h2>Test Complete!</h2>
+            <div id="final-score"></div>
+            <div id="final-time"></div>
+            <button id="restart-btn" class="start-btn">Restart Test</button>
+        </div>
+    </div>
+
+    <script>
+        let currentQuestionData = null;
+        let currentQuestion = 1;
+        let totalQuestions = 5;
+        let correctAnswers = 0;
+        let wrongAnswers = 0;
+        let timer = null;
+        let startTime = null;
+        let timerPaused = false;
+        let pausedTime = 0;
+
+        function startTimer() {
+            if (timer) {
+                clearInterval(timer);
+            }
+            startTime = new Date();
+            timerPaused = false;
+            timer = setInterval(updateTimer, 1000);
+        }
+
+        function pauseTimer() {
+            if (timer) {
+                clearInterval(timer);
+                timer = null;
+                timerPaused = true;
+                pausedTime = Math.floor((new Date() - startTime) / 1000);
+            }
+        }
+
+        function resumeTimer() {
+            if (timerPaused) {
+                startTime = new Date(new Date() - pausedTime * 1000);
+                timer = setInterval(updateTimer, 1000);
+                timerPaused = false;
+            }
+        }
+
+        function updateTimer() {
+            const currentTime = new Date();
+            const elapsedTime = Math.floor((currentTime - startTime) / 1000);
+            const minutes = Math.floor(elapsedTime / 60);
+            const seconds = elapsedTime % 60;
+            document.getElementById('timer').textContent = 
+                `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+        }
+
+        function updateProgress() {
+            document.getElementById('progress').textContent = `Question ${currentQuestion} of ${totalQuestions}`;
+        }
+
+        function startTest() {
+            document.getElementById('start-screen').style.display = 'none';
+            document.getElementById('test-screen').style.display = 'block';
+            document.getElementById('end-screen').style.display = 'none';
+            
+            currentQuestion = 1;
+            correctAnswers = 0;
+            wrongAnswers = 0;
+            updateProgress();
+            getNextQuestion();
+        }
+
+        function endTest() {
+            // Wait for the last question's feedback to be shown
+            setTimeout(() => {
+                if (timer) {
+                    clearInterval(timer);
+                    timer = null;
+                }
+                document.getElementById('test-screen').style.display = 'none';
+                document.getElementById('end-screen').style.display = 'block';
+                document.getElementById('final-score').textContent = 
+                    `Correct: ${correctAnswers}, Wrong: ${wrongAnswers}`;
+                document.getElementById('final-time').textContent = 
+                    `Time: ${document.getElementById('timer').textContent}`;
+            }, 3000);
+        }
+
+        function getNextQuestion() {
+            const level = document.getElementById('level-select').value;
+            
+            // Show loading message
+            document.getElementById('question-text').textContent = 'Loading question...';
+            
+            // Reset UI state
+            document.getElementById('answer-input').value = '';
+            document.getElementById('answer-input').disabled = false;
+            document.getElementById('feedback').textContent = '';
+            document.getElementById('feedback').className = 'feedback';
+            document.getElementById('submit-btn').disabled = false;
+            document.getElementById('next-btn').style.display = 'none';
+            
+            fetch('/get_question', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ level: parseInt(level) })
+            })
+            .then(response => response.json())
+            .then(result => {
+                if (result.status === 'error') {
+                    throw new Error(result.message);
+                }
+                
+                let data = result.data;
+                // Parse the data if it's a string
+                if (typeof data === 'string') {
+                    try {
+                        data = JSON.parse(data);
+                    } catch (e) {
+                        console.error('Error parsing question data:', e);
+                        throw new Error('Invalid question format');
+                    }
+                }
+                
+                currentQuestionData = data;
+                document.getElementById('question-text').textContent = data.question;
+                
+                // Reset skip button state
+                const skipBtn = document.getElementById('skip-btn');
+                skipBtn.disabled = true;
+                skipBtn.classList.add('disabled');
+                
+                // Enable skip after 1 minute
+                setTimeout(() => {
+                    if (currentQuestionData) {  // Only enable if we're still on a question
+                        skipBtn.disabled = false;
+                        skipBtn.classList.remove('disabled');
+                    }
+                }, 60000);
+
+                // Start timer after question is displayed
+                startTimer();
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                document.getElementById('question-text').textContent = 'Error loading question. Please try refreshing the page.';
+                // Enable skip button immediately on error
+                const skipBtn = document.getElementById('skip-btn');
+                skipBtn.disabled = false;
+                skipBtn.classList.remove('disabled');
+            });
+        }
+        
+        function submitAnswer() {
+            if (!currentQuestionData) {
+                console.error('No current question data');
+                return;
+            }
+
+            const userAnswer = document.getElementById('answer-input').value.trim();
+            
+            if (!userAnswer) {
+                alert('Please enter an answer');
+                return;
+            }
+            
+            // Pause timer after submitting answer
+            pauseTimer();
+            
+            fetch('/check_answer', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    question: currentQuestionData.question,
+                    user_answer: userAnswer,
+                    correct_answer: currentQuestionData.answer,
+                    explanation: currentQuestionData.explanation
+                })
+            })
+            .then(response => response.json())
+            .then(result => {
+                if (result.status === 'error') {
+                    throw new Error(result.message);
+                }
+                
+                let data = result.data;
+                // Parse the data if it's a string
+                if (typeof data === 'string') {
+                    try {
+                        data = JSON.parse(data);
+                    } catch (e) {
+                        console.error('Error parsing answer data:', e);
+                        throw new Error('Invalid answer format');
+                    }
+                }
+                
+                const feedback = document.getElementById('feedback');
+                
+                if (data.is_correct) {
+                    feedback.className = 'feedback correct';
+                    correctAnswers++;
+                } else {
+                    feedback.className = 'feedback incorrect';
+                    wrongAnswers++;
+                }
+                
+                feedback.innerHTML = `${data.feedback}<br><br>Explanation: ${data.explanation}`;
+                
+                // Disable input and buttons after answer
+                document.getElementById('answer-input').disabled = true;
+                document.getElementById('submit-btn').disabled = true;
+                document.getElementById('skip-btn').disabled = true;
+                
+                // Show next button if not last question
+                if (currentQuestion < totalQuestions) {
+                    document.getElementById('next-btn').style.display = 'block';
+                } else {
+                    // For the last question, show the explanation before ending
+                    setTimeout(() => {
+                        endTest();
+                    }, 3000);
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                document.getElementById('feedback').textContent = 'Error checking answer. Please try again.';
+                // Re-enable input and submit button on error
+                document.getElementById('answer-input').disabled = false;
+                document.getElementById('submit-btn').disabled = false;
+                // Resume timer on error
+                resumeTimer();
+            });
+        }
+        
+        function skipQuestion() {
+            if (currentQuestion < totalQuestions) {
+                currentQuestion++;
+                updateProgress();
+                getNextQuestion();
+            } else {
+                endTest();
+            }
+        }
+
+        function nextQuestion() {
+            currentQuestion++;
+            updateProgress();
+            getNextQuestion();
+        }
+
+        // Event Listeners
+        document.getElementById('start-btn').addEventListener('click', startTest);
+        document.getElementById('submit-btn').addEventListener('click', submitAnswer);
+        document.getElementById('skip-btn').addEventListener('click', skipQuestion);
+        document.getElementById('next-btn').addEventListener('click', nextQuestion);
+        document.getElementById('restart-btn').addEventListener('click', () => {
+            document.getElementById('end-screen').style.display = 'none';
+            document.getElementById('start-screen').style.display = 'block';
+        });
+
+        // Handle Enter key in answer input
+        document.getElementById('answer-input').addEventListener('keypress', function(event) {
+            if (event.key === 'Enter') {
+                event.preventDefault();
+                submitAnswer();
+            }
+        });
+    </script>
+</body>
+</html>
