@@ -174,8 +174,22 @@ if 'timer_start' not in st.session_state:
     st.session_state.timer_start = None
 if 'loading_question' not in st.session_state:
     st.session_state.loading_question = False
-if 'answer_input' not in st.session_state:
-    st.session_state.answer_input = ""
+
+# Callback to handle answer input changes
+def handle_answer_input():
+    if 'answer_input' in st.session_state:
+        current_answer = st.session_state.answer_input
+        # Process the answer if needed
+
+# Callback to handle next question
+def next_question():
+    st.session_state.loading_question = True
+    st.session_state.current_question = generate_question(st.session_state.difficulty)
+    st.session_state.show_explanation = False
+    st.session_state.timer_start = time.time()
+    st.session_state.loading_question = False
+    if 'answer_input' in st.session_state:
+        del st.session_state.answer_input
 
 # Level selection dropdown
 levels = {
@@ -198,7 +212,8 @@ if selected_level != st.session_state.difficulty:
     st.session_state.current_question = None
     st.session_state.show_explanation = False
     st.session_state.timer_start = None
-    reset_answer_field()
+    if 'answer_input' in st.session_state:
+        del st.session_state.answer_input
 
 # Main content area
 st.markdown("---")
@@ -219,13 +234,8 @@ if st.session_state.loading_question:
     """, unsafe_allow_html=True)
 
 if not st.session_state.current_question:
-    if st.button("Start Practice", type="primary"):
-        st.session_state.loading_question = True
-        st.session_state.current_question = generate_question(st.session_state.difficulty)
-        st.session_state.timer_start = time.time()
-        st.session_state.loading_question = False
-        reset_answer_field()
-        st.rerun()
+    if st.button("Start Practice", type="primary", on_click=next_question):
+        pass
 
 # Display current question and timer
 if st.session_state.current_question:
@@ -248,8 +258,7 @@ if st.session_state.current_question:
     
     if not st.session_state.show_explanation:
         # Answer section
-        user_answer = st.text_input("Enter your answer:", key="answer_input", value=st.session_state.answer_input)
-        st.session_state.answer_input = user_answer  # Update session state with current input
+        user_answer = st.text_input("Enter your answer:", key="answer_input", on_change=handle_answer_input)
         
         if st.button("Submit Answer", type="primary"):
             final_time = int(time.time() - st.session_state.timer_start)
@@ -274,14 +283,8 @@ if st.session_state.current_question:
             </div>
         """.format(st.session_state.current_question["explanation"]), unsafe_allow_html=True)
         
-        if st.button("Next Question", type="primary"):
-            st.session_state.loading_question = True
-            st.session_state.current_question = generate_question(st.session_state.difficulty)
-            st.session_state.show_explanation = False
-            st.session_state.timer_start = time.time()
-            st.session_state.loading_question = False
-            reset_answer_field()
-            st.rerun()
+        if st.button("Next Question", type="primary", on_click=next_question):
+            pass
 
 # Sidebar with statistics
 st.sidebar.markdown("### Your Progress")
@@ -312,14 +315,17 @@ if st.session_state.total_questions > 0:
     st.sidebar.markdown(f"### Performance Rating\n{performance}")
 
 # Reset button
-if st.sidebar.button("Reset Progress", type="secondary"):
+def reset_progress():
     st.session_state.score = 0
     st.session_state.total_questions = 0
     st.session_state.current_question = None
     st.session_state.show_explanation = False
     st.session_state.timer_start = None
-    reset_answer_field()
-    st.rerun()
+    if 'answer_input' in st.session_state:
+        del st.session_state.answer_input
+
+if st.sidebar.button("Reset Progress", type="secondary", on_click=reset_progress):
+    pass
 
 # Tips section in sidebar
 st.sidebar.markdown("""
