@@ -3,12 +3,21 @@ import streamlit as st
 import requests
 import json
 import time
+import random
 import google.generativeai as genai
 from typing import Dict, Any
+from dotenv import load_dotenv
 
-# Load environment variables
+# Load environment variables from .env file
+load_dotenv()
+
+# Get API keys from environment variables
 XAI_API_KEY = os.getenv('XAI_API_KEY')
 GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')
+
+if not XAI_API_KEY or not GEMINI_API_KEY:
+    st.error("API keys not found. Please check your .env file.")
+    st.stop()
 
 # Configure APIs
 XAI_BASE_URL = "https://api.x.ai/v1"
@@ -21,10 +30,29 @@ xai_headers = {
 genai.configure(api_key=GEMINI_API_KEY)
 gemini_model = genai.GenerativeModel('gemini-1.5-pro')
 
+# Define question types
+QUESTION_TYPES = [
+    "Time and Distance",
+    "Profit and Loss",
+    "Percentages",
+    "Number Series",
+    "Simple Interest",
+    "Compound Interest",
+    "Ratios and Proportions",
+    "Averages",
+    "Mixtures and Allegations",
+    "Work and Time"
+]
+
+def get_random_question_type() -> str:
+    """Randomly select a question type from the available types"""
+    return random.choice(QUESTION_TYPES)
+
 def generate_question_xai(level: int, question_type: str) -> Dict[str, Any]:
     """Generate a question using X.AI's Grok model"""
     try:
-        type_prompt = f"of type {question_type}" if question_type != "Random" else "randomly selected from different types"
+        # If Random is selected or there's an API error, choose a random type
+        actual_type = get_random_question_type() if question_type == "Random" else question_type
         
         response = requests.post(
             f"{XAI_BASE_URL}/chat/completions",
@@ -32,15 +60,36 @@ def generate_question_xai(level: int, question_type: str) -> Dict[str, Any]:
             json={
                 "model": "grok-beta",
                 "messages": [
-                    {"role": "system", "content": "You are APPtitude, an intelligent math teacher. Generate a mental math questions related to Quantitative Apptitude, like time and distance, profit and loss, measurements, number series types. Make sure the question is suitable for the given difficulty level (1-5). and questions must be randomly across the different types mentioned"},
-                    {"role": "user", "content": f"Generate a mental math question {type_prompt} for difficulty level {level} (1=easiest, 5=hardest). Return ONLY a JSON object with the following format: {{\"question\": \"question text\", \"answer\": \"numerical answer\", \"explanation\": \"step-by-step solution\"}}"}
-                ]
+                    {"role": "system", "content": "You are APPtitude, an intelligent math teacher. Generate mental math questions related to Quantitative Aptitude, like time and distance, profit and loss, measurements, number series types. Make sure the question is suitable for the given difficulty level (1-5)."},
+                    {"role": "user", "content": f"Generate a mental math question of type {actual_type} for difficulty level {level} (1=easiest, 5=hardest). Format your response as a valid JSON object with exactly these fields: question (string), answer (string with just the number), and explanation (string). Example: {{\"question\": \"What is 2+2?\", \"answer\": \"4\", \"explanation\": \"Adding 2 and 2 equals 4\"}}"}
+                ],
+                "temperature": 0.7,
+                "max_tokens": 500
             }
         )
         
         response.raise_for_status()
         result = response.json()
-        question_data = json.loads(result['choices'][0]['message']['content'])
+        
+        # Extract the content from the response
+        content = result['choices'][0]['message']['content']
+        
+        # Clean up the content to ensure it's valid JSON
+        content = content.strip()
+        if content.startswith('```json'):
+            content = content[7:]
+        if content.endswith('```'):
+            content = content[:-3]
+        content = content.strip()
+        
+        # Parse the JSON content
+        question_data = json.loads(content)
+        
+        # Validate the required fields
+        required_fields = ['question', 'answer', 'explanation']
+        if not all(field in question_data for field in required_fields):
+            raise ValueError("Missing required fields in response")
+            
         return question_data
     except Exception as e:
         st.error(f"Error generating question with X.AI: {str(e)}")
@@ -49,9 +98,10 @@ def generate_question_xai(level: int, question_type: str) -> Dict[str, Any]:
 def generate_question_gemini(level: int, question_type: str) -> Dict[str, Any]:
     """Generate a question using Google's Gemini model"""
     try:
-        type_prompt = f"of type {question_type}" if question_type != "Random" else "randomly selected from different types"
+        # If Random is selected or there's an API error, choose a random type
+        actual_type = get_random_question_type() if question_type == "Random" else question_type
         
-        prompt = f"""You are APPtitude, an intelligent math teacher. Generate a mental math question {type_prompt} for difficulty level {level} (1=easiest, 5=hardest).
+        prompt = f"""You are APPtitude, an intelligent math teacher. Generate a mental math question of type {actual_type} for difficulty level {level} (1=easiest, 5=hardest).
         The question should be related to Quantitative Aptitude topics like time and distance, profit and loss, measurements, or number series.
         Return ONLY a JSON object with this exact format: {{"question": "question text", "answer": "numerical answer", "explanation": "step-by-step solution"}}
         Make sure the answer is a numerical value that can be directly compared."""
@@ -77,21 +127,27 @@ def check_answer_xai(user_answer: str, question: str, correct_answer: str) -> bo
             json={
                 "model": "grok-beta",
                 "messages": [
-                    {"role": "system", "content": "You are APPtitude, an intelligent math teacher evaluating student answers. answers can have other details along with the number value, so carefully understand the answer and question, instead of literally looking for the exact value."},
-                    {"role": "user", "content": f"""Question: {question}
-                    User's answer: {user_answer}
-                    Correct answer: {correct_answer}
-                    
-                    Evaluate if the user's answer is correct and return ONLY a JSON object with this format:
-                    {{"is_correct": true/false}}"""}
-                ]
+                    {"role": "system", "content": "You are a precise math validator. Your task is to compare two numerical answers and determine if they are equivalent, considering different formats and representations. Respond with ONLY 'true' or 'false'."},
+                    {"role": "user", "content": f"Question: {question}\nUser answer: {user_answer}\nCorrect answer: {correct_answer}\n\nAre these answers equivalent? Consider different number formats and representations. Respond with ONLY 'true' or 'false'."}
+                ],
+                "temperature": 0.1,
+                "max_tokens": 10
             }
         )
         
         response.raise_for_status()
         result = response.json()
-        validation_result = json.loads(result['choices'][0]['message']['content'])
-        return validation_result.get('is_correct', False)
+        content = result['choices'][0]['message']['content'].strip().lower()
+        
+        # First try exact match with 'true' or 'false'
+        if content == 'true':
+            return True
+        if content == 'false':
+            return False
+            
+        # If not exact match, try fallback
+        return check_answer_fallback(user_answer, correct_answer)
+        
     except Exception as e:
         st.error(f"Error validating answer with X.AI: {str(e)}")
         return check_answer_fallback(user_answer, correct_answer)
@@ -103,27 +159,46 @@ def check_answer_gemini(user_answer: str, question: str, correct_answer: str) ->
         User's answer: {user_answer}
         Correct answer: {correct_answer}
         
-        Evaluate if the user's answer is correct. Consider numerical equivalence and different formats of expressing the same value.
-        Return ONLY a JSON object with this format: {{"is_correct": true/false}}"""
+        Is the user's answer correct? Consider numerical equivalence and different formats.
+        Return ONLY 'true' or 'false' as response."""
 
         response = gemini_model.generate_content(prompt)
         
-        # Extract JSON from response
-        json_str = response.text.strip().strip('`').strip('json')
-        validation_result = json.loads(json_str)
-        return validation_result.get('is_correct', False)
+        # Get the response content and convert to lowercase
+        content = response.text.strip().lower()
+        
+        # Simple string matching
+        return content == 'true'
+        
     except Exception as e:
-        st.error(f"Error validating answer with Gemini: {str(e)}")
+        print(f"Error in check_answer_gemini: {str(e)}")  # Debug log
         return check_answer_fallback(user_answer, correct_answer)
 
 def check_answer_fallback(user_answer: str, correct_answer: str) -> bool:
     """Fallback answer validation using simple comparison"""
     try:
-        user_float = float(user_answer.strip())
-        correct_float = float(correct_answer.strip())
+        # Remove any currency symbols and whitespace
+        user_clean = user_answer.strip().replace('$', '').replace('₹', '').replace(',', '')
+        correct_clean = correct_answer.strip().replace('$', '').replace('₹', '').replace(',', '')
+        
+        # Convert to float and compare
+        user_float = float(user_clean)
+        correct_float = float(correct_clean)
+        
+        # Allow for small floating-point differences
         return abs(user_float - correct_float) < 0.01
     except ValueError:
+        # If conversion to float fails, do a case-insensitive string comparison
         return user_answer.strip().lower() == correct_answer.strip().lower()
+
+def check_answer(user_answer: str, question: str, correct_answer: str) -> bool:
+    """Check answer based on selected LLM"""
+    llm_choice = st.session_state.llm_choice if 'llm_choice' in st.session_state else "X.AI (Grok)"
+    
+    if llm_choice == "X.AI (Grok)":
+        return check_answer_xai(user_answer, question, correct_answer)
+    else:
+        return check_answer_gemini(user_answer, question, correct_answer)
 
 def generate_fallback_question(level: int) -> Dict[str, Any]:
     """Generate a fallback question when API calls fail"""
@@ -145,25 +220,6 @@ def generate_question(level: int) -> Dict[str, Any]:
         return generate_question_xai(level, question_type)
     else:
         return generate_question_gemini(level, question_type)
-
-def check_answer(user_answer: str, question: str, correct_answer: str) -> bool:
-    """Check answer based on selected LLM"""
-    llm_choice = st.session_state.llm_choice if 'llm_choice' in st.session_state else "X.AI (Grok)"
-    
-    if llm_choice == "X.AI (Grok)":
-        return check_answer_xai(user_answer, question, correct_answer)
-    else:
-        return check_answer_gemini(user_answer, question, correct_answer)
-
-# Get API key from environment or secrets
-if st.secrets and 'XAI_API_KEY' in st.secrets:
-    api_key = st.secrets['XAI_API_KEY']
-else:
-    api_key = os.getenv('XAI_API_KEY')
-
-if not api_key:
-    st.error("API key not found. Please set XAI_API_KEY in environment variables or Streamlit secrets.")
-    st.stop()
 
 # Initialize session state
 if 'difficulty' not in st.session_state:
@@ -189,6 +245,238 @@ if 'question_type' not in st.session_state:
 if 'llm_choice' not in st.session_state:
     st.session_state.llm_choice = "X.AI (Grok)"
 
+# Modern CSS styling with subtle colors
+st.markdown("""
+    <style>
+    /* Subtle color palette and variables */
+    :root {
+        --primary-color: #2563eb;
+        --primary-light: #60a5fa;
+        --primary-dark: #1e40af;
+        --success-color: #059669;
+        --error-color: #dc2626;
+        --background-color: #f8fafc;
+        --card-background: #ffffff;
+        --text-primary: #1e293b;
+        --text-secondary: #64748b;
+        --border-radius: 0.5rem;
+        --transition: all 0.2s ease;
+    }
+
+    /* Global styles */
+    .main {
+        padding: 2rem;
+        background: var(--background-color);
+        color: var(--text-primary) !important;
+        max-width: 1200px;
+        margin: 0 auto;
+    }
+
+    /* Header styling */
+    .app-header {
+        text-align: center;
+        padding: 1.5rem;
+        background: white;
+        border-radius: var(--border-radius);
+        margin-bottom: 2rem;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    }
+
+    .app-header h1 {
+        color: var(--primary-color) !important;
+        font-size: 2rem !important;
+        font-weight: 600 !important;
+        margin-bottom: 0.5rem !important;
+    }
+
+    .app-header p {
+        color: var(--text-secondary) !important;
+        font-size: 1.1rem !important;
+        font-weight: 400;
+    }
+
+    /* Card styling */
+    .question-card {
+        background: var(--card-background);
+        padding: 1.5rem;
+        border-radius: var(--border-radius);
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        margin: 1rem 0;
+        border: 1px solid rgba(0, 0, 0, 0.05);
+    }
+
+    .question-card h3 {
+        color: var(--text-primary) !important;
+        font-size: 1.25rem !important;
+        font-weight: 600 !important;
+        margin-bottom: 1rem !important;
+    }
+
+    .question-card p {
+        color: var(--text-secondary) !important;
+        font-size: 1.1rem !important;
+        line-height: 1.6 !important;
+    }
+
+    /* Timer styling */
+    .timer {
+        font-family: 'SF Mono', 'Roboto Mono', monospace !important;
+        font-size: 1.25rem !important;
+        font-weight: 500 !important;
+        color: var(--primary-color) !important;
+        padding: 0.75rem !important;
+        text-align: center !important;
+        margin: 1rem 0 !important;
+        background: rgba(37, 99, 235, 0.1) !important;
+        border-radius: var(--border-radius);
+    }
+
+    /* Button styling */
+    .stButton > button {
+        width: 100%;
+        padding: 0.75rem 1.5rem !important;
+        font-size: 1rem !important;
+        font-weight: 500 !important;
+        color: white !important;
+        background: var(--primary-color) !important;
+        border: none !important;
+        border-radius: var(--border-radius) !important;
+        transition: var(--transition) !important;
+    }
+
+    .stButton > button:hover {
+        background: var(--primary-dark) !important;
+        transform: translateY(-1px);
+    }
+
+    /* Select box styling */
+    .stSelectbox > div > div {
+        background: white !important;
+        border-radius: var(--border-radius) !important;
+        border: 1px solid rgba(0, 0, 0, 0.1) !important;
+    }
+
+    /* Input field styling */
+    .stTextInput > div > div > input {
+        border-radius: var(--border-radius) !important;
+        border: 1px solid rgba(0, 0, 0, 0.1) !important;
+        padding: 0.75rem !important;
+        font-size: 1rem !important;
+    }
+
+    .stTextInput > div > div > input:focus {
+        border-color: var(--primary-color) !important;
+        box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.2) !important;
+    }
+
+    /* Success/Error message styling */
+    .element-container:has(div[data-testid="stMarkdownContainer"]:has(div[class*="stAlert"][data-baseweb="notification"][kind="success"])) {
+        background: #f0fdf4 !important;
+        padding: 1rem !important;
+        border-radius: var(--border-radius) !important;
+        border: 1px solid #bbf7d0 !important;
+    }
+
+    .element-container:has(div[data-testid="stMarkdownContainer"]:has(div[class*="stAlert"][data-baseweb="notification"][kind="error"])) {
+        background: #fef2f2 !important;
+        padding: 1rem !important;
+        border-radius: var(--border-radius) !important;
+        border: 1px solid #fecaca !important;
+    }
+
+    /* Loading animation */
+    .loading {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        padding: 1.5rem;
+        background: var(--card-background);
+        border-radius: var(--border-radius);
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    }
+
+    .loading::after {
+        content: "";
+        width: 1.5rem;
+        height: 1.5rem;
+        border: 2px solid var(--primary-light);
+        border-top: 2px solid var(--primary-dark);
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+    }
+
+    @keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+    }
+
+    /* Score display */
+    .score-display {
+        background: white;
+        color: var(--text-primary) !important;
+        padding: 1rem;
+        border-radius: var(--border-radius);
+        text-align: center;
+        font-size: 1.1rem !important;
+        font-weight: 500;
+        margin: 1rem 0;
+        border: 1px solid rgba(0, 0, 0, 0.05);
+    }
+
+    /* Mobile responsiveness */
+    @media (max-width: 768px) {
+        .main {
+            padding: 1rem;
+        }
+
+        .app-header {
+            padding: 1rem;
+        }
+
+        .app-header h1 {
+            font-size: 1.5rem !important;
+        }
+
+        .app-header p {
+            font-size: 1rem !important;
+        }
+
+        .question-card {
+            padding: 1rem;
+        }
+
+        .question-card h3 {
+            font-size: 1.1rem !important;
+        }
+
+        .question-card p {
+            font-size: 1rem !important;
+        }
+
+        .timer {
+            font-size: 1.1rem !important;
+        }
+
+        .stButton > button {
+            padding: 0.6rem 1rem !important;
+            font-size: 0.9rem !important;
+        }
+    }
+
+    /* Hide Streamlit branding */
+    #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
+    </style>
+    """, unsafe_allow_html=True)
+
+# Updated header with subtle design
+st.markdown("""
+    <div class='app-header'>
+        <h1>APPtitude</h1>
+        <p>Master Quantitative Skills with Interactive Practice</p>
+    </div>
+""", unsafe_allow_html=True)
+
 # Callback to handle answer input changes
 def handle_answer_input():
     if 'answer_input' in st.session_state:
@@ -208,36 +496,20 @@ def next_question():
 col1, col2, col3 = st.columns(3)
 
 with col1:
-    levels = {
-        1: "Level 1 - Basic Calculations",
-        2: "Level 2 - Simple Applications",
-        3: "Level 3 - Complex Problems",
-        4: "Level 4 - Advanced Concepts",
-        5: "Level 5 - Expert Challenges"
-    }
-
-    selected_level = st.selectbox(
+    st.session_state.difficulty = st.selectbox(
         "Select Difficulty Level",
-        options=list(levels.keys()),
-        format_func=lambda x: levels[x],
-        key="level_selector"
+        options=[1, 2, 3, 4, 5],
+        index=st.session_state.difficulty - 1,
+        format_func=lambda x: f"Level {x}",
+        key="difficulty_select"
     )
 
 with col2:
-    question_types = [
-        "Random",
-        "Time and Distance",
-        "Profit and Loss",
-        "Number Series",
-        "Time and Work",
-        "Ratios and Mixtures",
-        "Measurements"
-    ]
-    
-    selected_type = st.selectbox(
+    st.session_state.question_type = st.selectbox(
         "Select Question Type",
-        options=question_types,
-        key="type_selector"
+        options=["Random"] + QUESTION_TYPES,
+        index=0,
+        key="question_type_select"
     )
 
 with col3:
@@ -248,11 +520,11 @@ with col3:
         key="llm_selector"
     )
 
-if (selected_level != st.session_state.difficulty or 
-    selected_type != st.session_state.question_type or 
+if (st.session_state.difficulty != st.session_state.difficulty or 
+    st.session_state.question_type != st.session_state.question_type or 
     selected_llm != st.session_state.llm_choice):
-    st.session_state.difficulty = selected_level
-    st.session_state.question_type = selected_type
+    st.session_state.difficulty = st.session_state.difficulty
+    st.session_state.question_type = st.session_state.question_type
     st.session_state.llm_choice = selected_llm
     st.session_state.current_question = None
     st.session_state.show_explanation = False
@@ -402,212 +674,3 @@ st.sidebar.markdown("""
     - Practice regularly for better results
     - Review explanations to learn from mistakes
 """)
-
-# Custom CSS for professional styling and mobile responsiveness
-st.markdown("""
-    <style>
-    .main {
-        padding: 1rem;
-        color: #1f2937 !important;
-    }
-    .stApp {
-        background-color: #f3f4f6;
-    }
-    @media (max-width: 768px) {
-        .main {
-            padding: 0.5rem;
-        }
-        .stButton>button {
-            width: 100% !important;
-            margin: 0.25rem 0 !important;
-        }
-        .row-widget.stSelectbox {
-            margin-bottom: 1rem;
-        }
-    }
-    .stButton>button {
-        width: 100%;
-        height: 3rem;
-        margin-top: 0.5rem;
-    }
-    .question-card {
-        background-color: #ffffff !important;
-        padding: 1.5rem;
-        border-radius: 0.75rem;
-        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-        margin: 0.75rem 0;
-        word-wrap: break-word;
-        overflow-wrap: break-word;
-    }
-    .question-card h3 {
-        color: #1f2937 !important;
-        margin-bottom: 1rem !important;
-        font-size: 1.25rem !important;
-    }
-    .question-card p {
-        color: #374151 !important;
-        font-size: 1.1rem !important;
-        line-height: 1.5 !important;
-    }
-    .explanation-card {
-        background-color: #f8f9fa !important;
-        padding: 1.25rem;
-        border-radius: 0.5rem;
-        margin-top: 0.75rem;
-        word-wrap: break-word;
-        overflow-wrap: break-word;
-    }
-    .explanation-card h3 {
-        color: #1f2937 !important;
-        margin-bottom: 0.75rem !important;
-        font-size: 1.25rem !important;
-    }
-    .explanation-card p {
-        color: #374151 !important;
-        line-height: 1.5 !important;
-    }
-    .timer {
-        font-size: 1.25rem;
-        font-weight: bold;
-        color: #1f2937 !important;
-        text-align: center;
-        padding: 0.75rem;
-        background-color: #e5e7eb !important;
-        border-radius: 0.5rem;
-        margin: 0.75rem 0;
-    }
-    .loading {
-        text-align: center;
-        padding: 1.5rem;
-        font-size: 1.1rem;
-        color: #4b5563 !important;
-    }
-    .app-header {
-        text-align: center;
-        margin-bottom: 1rem;
-        background-color: #ffffff;
-        padding: 1rem;
-        border-radius: 0.5rem;
-        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-    }
-    .app-header h1 {
-        color: #1f2937 !important;
-        font-size: 2rem !important;
-        margin-bottom: 0.5rem !important;
-    }
-    .app-header p {
-        color: #4b5563 !important;
-        font-size: 1.1rem !important;
-    }
-    @media (max-width: 768px) {
-        .app-header h1 {
-            font-size: 1.5rem !important;
-        }
-        .app-header p {
-            font-size: 0.9rem !important;
-        }
-        .question-card, .explanation-card {
-            padding: 1rem;
-            margin: 0.5rem 0;
-            background-color: #ffffff !important;
-        }
-        .question-card p {
-            color: #374151 !important;
-            font-size: 1rem !important;
-        }
-        .timer {
-            font-size: 1rem;
-            padding: 0.5rem;
-            background-color: #e5e7eb !important;
-            color: #1f2937 !important;
-        }
-    }
-    div[data-testid="stToolbar"] {
-        display: none;
-    }
-    .stTextInput>div>div>input {
-        color: #1f2937 !important;
-        background-color: #ffffff !important;
-    }
-    .stTextInput>label {
-        color: #374151 !important;
-    }
-    .stMarkdown {
-        color: #1f2937 !important;
-    }
-    .stAlert {
-        background-color: #ffffff !important;
-        border-radius: 0.5rem !important;
-        padding: 0.75rem !important;
-        margin: 0.5rem 0 !important;
-        border: 1px solid rgba(0, 0, 0, 0.1) !important;
-    }
-    
-    .stAlert > div {
-        min-height: unset !important;
-        padding: 0.5rem !important;
-        display: flex !important;
-        align-items: center !important;
-    }
-    
-    /* Success message styling */
-    .element-container:has(div[data-testid="stMarkdownContainer"]:has(div[class*="stAlert"][data-baseweb="notification"][kind="success"])) {
-        background-color: #ecfdf5 !important;
-        padding: 1rem !important;
-        border-radius: 0.5rem !important;
-        margin: 0.5rem 0 !important;
-    }
-    
-    .element-container:has(div[data-testid="stMarkdownContainer"]:has(div[class*="stAlert"][data-baseweb="notification"][kind="success"])) p {
-        color: #065f46 !important;
-        font-weight: 500 !important;
-        font-size: 1.1rem !important;
-    }
-    
-    /* Error message styling */
-    .element-container:has(div[data-testid="stMarkdownContainer"]:has(div[class*="stAlert"][data-baseweb="notification"][kind="error"])) {
-        background-color: #fef2f2 !important;
-        padding: 1rem !important;
-        border-radius: 0.5rem !important;
-        margin: 0.5rem 0 !important;
-    }
-    
-    .element-container:has(div[data-testid="stMarkdownContainer"]:has(div[class*="stAlert"][data-baseweb="notification"][kind="error"])) p {
-        color: #991b1b !important;
-        font-weight: 500 !important;
-        font-size: 1.1rem !important;
-    }
-    
-    /* Mobile-specific adjustments */
-    @media (max-width: 768px) {
-        .stAlert {
-            margin: 0.25rem 0 !important;
-            padding: 0.5rem !important;
-        }
-        
-        .element-container:has(div[data-testid="stMarkdownContainer"]:has(div[class*="stAlert"])) p {
-            font-size: 1rem !important;
-            line-height: 1.4 !important;
-        }
-        
-        /* Increase contrast for better readability */
-        .element-container:has(div[data-testid="stMarkdownContainer"]:has(div[class*="stAlert"][data-baseweb="notification"][kind="success"])) p {
-            color: #064e3b !important;
-            text-shadow: 0 0 1px rgba(255, 255, 255, 0.5) !important;
-        }
-        
-        .element-container:has(div[data-testid="stMarkdownContainer"]:has(div[class*="stAlert"][data-baseweb="notification"][kind="error"])) p {
-            color: #7f1d1d !important;
-            text-shadow: 0 0 1px rgba(255, 255, 255, 0.5) !important;
-        }
-    }
-    </style>
-    """, unsafe_allow_html=True)
-
-# Header with responsive design
-st.markdown("""
-    <div class='app-header'>
-        <h1>APPtitude - Quantitative Aptitude Practice</h1>
-        <p>Master quantitative concepts through interactive practice</p>
-    </div>
-""", unsafe_allow_html=True)
