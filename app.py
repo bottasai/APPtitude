@@ -350,10 +350,89 @@ st.markdown("""
     }
 
     /* Select box styling */
+    .stSelectbox {
+        margin-bottom: 1rem;
+    }
+
     .stSelectbox > div > div {
         background: white !important;
         border-radius: var(--border-radius) !important;
         border: 1px solid rgba(0, 0, 0, 0.1) !important;
+    }
+
+    .stSelectbox > div > div > div {
+        color: var(--text-primary) !important;
+        background: white !important;
+        font-size: 1rem !important;
+        font-weight: 500 !important;
+    }
+
+    .stSelectbox > div > div[data-baseweb="select"] > div {
+        background: white !important;
+        color: var(--text-primary) !important;
+    }
+
+    .stSelectbox > div > div[data-baseweb="select"] > div > div {
+        color: var(--text-primary) !important;
+    }
+
+    .stSelectbox > div > div[data-baseweb="popover"] > div {
+        background: white !important;
+        border: 1px solid rgba(0, 0, 0, 0.1) !important;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06) !important;
+    }
+
+    .stSelectbox > div > div[data-baseweb="popover"] > div > ul > li {
+        background: white !important;
+        color: var(--text-primary) !important;
+    }
+
+    .stSelectbox > div > div[data-baseweb="popover"] > div > ul > li:hover {
+        background: var(--background-color) !important;
+    }
+
+    .stSelectbox > div > div[data-baseweb="popover"] > div > ul > li[aria-selected="true"] {
+        background: var(--primary-color) !important;
+        color: white !important;
+    }
+
+    /* Mobile-specific select box styling */
+    @media (max-width: 768px) {
+        .stSelectbox {
+            margin-bottom: 0.75rem;
+        }
+
+        .stSelectbox > div > div {
+            background: white !important;
+            border: 1px solid rgba(0, 0, 0, 0.15) !important;
+        }
+
+        .stSelectbox > div > div > div {
+            font-size: 0.9rem !important;
+            padding: 0.5rem !important;
+        }
+
+        /* Ensure selected option is visible */
+        .stSelectbox > div > div[data-baseweb="select"] > div {
+            background: white !important;
+            color: var(--text-primary) !important;
+            font-weight: 500 !important;
+        }
+
+        /* Style dropdown options */
+        .stSelectbox > div > div[data-baseweb="popover"] {
+            margin-top: 0.25rem !important;
+        }
+
+        .stSelectbox > div > div[data-baseweb="popover"] > div {
+            border-radius: var(--border-radius) !important;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06) !important;
+        }
+
+        .stSelectbox > div > div[data-baseweb="popover"] > div > ul > li {
+            padding: 0.75rem !important;
+            font-size: 0.9rem !important;
+        }
     }
 
     /* Input field styling */
