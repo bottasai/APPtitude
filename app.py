@@ -174,6 +174,8 @@ if 'timer_start' not in st.session_state:
     st.session_state.timer_start = None
 if 'loading_question' not in st.session_state:
     st.session_state.loading_question = False
+if 'question_number' not in st.session_state:
+    st.session_state.question_number = 0
 
 # Callback to handle answer input changes
 def handle_answer_input():
@@ -188,8 +190,7 @@ def next_question():
     st.session_state.show_explanation = False
     st.session_state.timer_start = time.time()
     st.session_state.loading_question = False
-    if 'answer_input' in st.session_state:
-        del st.session_state.answer_input
+    st.session_state.question_number += 1  # Increment question number
 
 # Level selection dropdown
 levels = {
@@ -212,8 +213,7 @@ if selected_level != st.session_state.difficulty:
     st.session_state.current_question = None
     st.session_state.show_explanation = False
     st.session_state.timer_start = None
-    if 'answer_input' in st.session_state:
-        del st.session_state.answer_input
+    st.session_state.question_number = 0  # Reset question number
 
 # Main content area
 st.markdown("---")
@@ -257,8 +257,11 @@ if st.session_state.current_question:
     """.format(st.session_state.current_question["question"]), unsafe_allow_html=True)
     
     if not st.session_state.show_explanation:
-        # Answer section
-        user_answer = st.text_input("Enter your answer:", key="answer_input", on_change=handle_answer_input)
+        # Answer section with dynamic key based on question number
+        user_answer = st.text_input(
+            "Enter your answer:", 
+            key=f"answer_input_{st.session_state.question_number}"
+        )
         
         if st.button("Submit Answer", type="primary"):
             final_time = int(time.time() - st.session_state.timer_start)
@@ -321,6 +324,7 @@ def reset_progress():
     st.session_state.current_question = None
     st.session_state.show_explanation = False
     st.session_state.timer_start = None
+    st.session_state.question_number = 0  # Reset question number
     if 'answer_input' in st.session_state:
         del st.session_state.answer_input
 
