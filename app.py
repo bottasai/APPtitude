@@ -22,17 +22,19 @@ headers = {
 }
 
 def generate_question(level):
-    """Generate a question based on the difficulty level"""
     try:
         # First try to generate a question using X.AI
+        question_type = st.session_state.question_type if 'question_type' in st.session_state else "Random"
+        type_prompt = f"of type {question_type}" if question_type != "Random" else "randomly selected from different types"
+        
         response = requests.post(
             f"{XAI_BASE_URL}/chat/completions",
             headers=headers,
             json={
                 "model": "grok-beta",
                 "messages": [
-                    {"role": "system", "content": "You are APPtitude, an intelligent math teacher. Generate a mental math questions related to Quantitative Apptitude, like time and distance, profit and loss, measurements, number series, etc. Make sure the question is suitable for the given difficulty level (1-5)."},
-                    {"role": "user", "content": f"Generate a mental math question for difficulty level {level} (1=easiest, 5=hardest). Return ONLY a JSON object with the following format: {{\"question\": \"question text\", \"answer\": \"numerical answer\", \"explanation\": \"step-by-step solution\"}}"}
+                    {"role": "system", "content": "You are APPtitude, an intelligent math teacher. Generate a mental math questions related to Quantitative Apptitude, like time and distance, profit and loss, measurements, number series types. Make sure the question is suitable for the given difficulty level (1-5). and questions must be randomly across the different types mentioned"},
+                    {"role": "user", "content": f"Generate a mental math question {type_prompt} for difficulty level {level} (1=easiest, 5=hardest). Return ONLY a JSON object with the following format: {{\"question\": \"question text\", \"answer\": \"numerical answer\", \"explanation\": \"step-by-step solution\"}}"}
                 ]
             }
         )
@@ -105,14 +107,27 @@ def reset_answer_field():
 st.set_page_config(
     page_title="APPtitude - Quantitative Aptitude Practice",
     page_icon="📊",
-    layout="wide"
+    layout="wide",
+    initial_sidebar_state="collapsed"
 )
 
-# Custom CSS for professional styling
+# Custom CSS for professional styling and mobile responsiveness
 st.markdown("""
     <style>
     .main {
-        padding: 2rem;
+        padding: 1rem;
+    }
+    @media (max-width: 768px) {
+        .main {
+            padding: 0.5rem;
+        }
+        .stButton>button {
+            width: 100% !important;
+            margin: 0.25rem 0 !important;
+        }
+        .row-widget.stSelectbox {
+            margin-bottom: 1rem;
+        }
     }
     .stButton>button {
         width: 100%;
@@ -121,41 +136,67 @@ st.markdown("""
     }
     .question-card {
         background-color: white;
-        padding: 2rem;
-        border-radius: 1rem;
-        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-        margin: 1rem 0;
+        padding: 1.5rem;
+        border-radius: 0.75rem;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        margin: 0.75rem 0;
+        word-wrap: break-word;
+        overflow-wrap: break-word;
     }
     .explanation-card {
         background-color: #f8f9fa;
-        padding: 1.5rem;
+        padding: 1.25rem;
         border-radius: 0.5rem;
-        margin-top: 1rem;
+        margin-top: 0.75rem;
+        word-wrap: break-word;
+        overflow-wrap: break-word;
     }
     .timer {
-        font-size: 1.5rem;
+        font-size: 1.25rem;
         font-weight: bold;
         color: #1f2937;
         text-align: center;
-        padding: 1rem;
+        padding: 0.75rem;
         background-color: #f0f2f6;
         border-radius: 0.5rem;
-        margin: 1rem 0;
+        margin: 0.75rem 0;
     }
     .loading {
         text-align: center;
-        padding: 2rem;
-        font-size: 1.2rem;
+        padding: 1.5rem;
+        font-size: 1.1rem;
         color: #6b7280;
+    }
+    .app-header {
+        text-align: center;
+        margin-bottom: 1rem;
+    }
+    @media (max-width: 768px) {
+        .app-header h1 {
+            font-size: 1.5rem !important;
+        }
+        .app-header p {
+            font-size: 0.9rem !important;
+        }
+        .question-card, .explanation-card {
+            padding: 1rem;
+            margin: 0.5rem 0;
+        }
+        .timer {
+            font-size: 1rem;
+            padding: 0.5rem;
+        }
     }
     </style>
     """, unsafe_allow_html=True)
 
-# Header
-col1, col2 = st.columns([2, 1])
-with col1:
-    st.title("APPtitude - Quantitative Aptitude Practice")
-    st.markdown("Master quantitative concepts through interactive practice: Time & Distance, Profit & Loss, Measurements, Number Series, and more!")
+# Header with responsive design
+st.markdown("""
+    <div class='app-header'>
+        <h1>APPtitude - Quantitative Aptitude Practice</h1>
+        <p>Master quantitative concepts through interactive practice</p>
+    </div>
+""", unsafe_allow_html=True)
 
 # Initialize session state
 if 'difficulty' not in st.session_state:
@@ -176,6 +217,8 @@ if 'loading_question' not in st.session_state:
     st.session_state.loading_question = False
 if 'question_number' not in st.session_state:
     st.session_state.question_number = 0
+if 'question_type' not in st.session_state:
+    st.session_state.question_type = "Random"
 
 # Callback to handle answer input changes
 def handle_answer_input():
@@ -192,28 +235,49 @@ def next_question():
     st.session_state.loading_question = False
     st.session_state.question_number += 1  # Increment question number
 
-# Level selection dropdown
-levels = {
-    1: "Level 1 - Basic Calculations",
-    2: "Level 2 - Simple Applications",
-    3: "Level 3 - Complex Problems",
-    4: "Level 4 - Advanced Concepts",
-    5: "Level 5 - Expert Challenges"
-}
+# Level selection dropdown and question type selection
+col1, col2 = st.columns(2)
 
-selected_level = st.selectbox(
-    "Select Difficulty Level",
-    options=list(levels.keys()),
-    format_func=lambda x: levels[x],
-    key="level_selector"
-)
+with col1:
+    levels = {
+        1: "Level 1 - Basic Calculations",
+        2: "Level 2 - Simple Applications",
+        3: "Level 3 - Complex Problems",
+        4: "Level 4 - Advanced Concepts",
+        5: "Level 5 - Expert Challenges"
+    }
 
-if selected_level != st.session_state.difficulty:
+    selected_level = st.selectbox(
+        "Select Difficulty Level",
+        options=list(levels.keys()),
+        format_func=lambda x: levels[x],
+        key="level_selector"
+    )
+
+with col2:
+    question_types = [
+        "Random",
+        "Time and Distance",
+        "Profit and Loss",
+        "Number Series",
+        "Time and Work",
+        "Ratios and Mixtures",
+        "Measurements"
+    ]
+    
+    selected_type = st.selectbox(
+        "Select Question Type",
+        options=question_types,
+        key="type_selector"
+    )
+
+if selected_level != st.session_state.difficulty or selected_type != st.session_state.question_type:
     st.session_state.difficulty = selected_level
+    st.session_state.question_type = selected_type
     st.session_state.current_question = None
     st.session_state.show_explanation = False
     st.session_state.timer_start = None
-    st.session_state.question_number = 0  # Reset question number
+    st.session_state.question_number = 0
 
 # Main content area
 st.markdown("---")
@@ -239,55 +303,70 @@ if not st.session_state.current_question:
 
 # Display current question and timer
 if st.session_state.current_question:
-    # Display timer
-    if st.session_state.timer_start and not st.session_state.show_explanation:
-        elapsed_time = int(time.time() - st.session_state.timer_start)
+    try:
+        # Display timer
+        if st.session_state.timer_start and not st.session_state.show_explanation:
+            elapsed_time = int(time.time() - st.session_state.timer_start)
+            st.markdown(f"""
+                <div class='timer'>
+                    ⏱️ Time Elapsed: {format_time(elapsed_time)}
+                </div>
+            """, unsafe_allow_html=True)
+        
+        # Safely display question with error handling
+        question_text = st.session_state.current_question.get("question", "")
+        if not question_text:
+            st.error("Error: Question not available. Generating new question...")
+            next_question()
+            st.rerun()
+        
         st.markdown(f"""
-            <div class='timer'>
-                ⏱️ Time Elapsed: {format_time(elapsed_time)}
+            <div class='question-card'>
+                <h3>Question</h3>
+                <p style='font-size: 1.1rem; line-height: 1.5;'>{question_text}</p>
             </div>
         """, unsafe_allow_html=True)
-    
-    # Display question
-    st.markdown("""
-        <div class='question-card'>
-            <h3>Question</h3>
-            <p style='font-size: 1.2rem;'>{}</p>
-        </div>
-    """.format(st.session_state.current_question["question"]), unsafe_allow_html=True)
-    
-    if not st.session_state.show_explanation:
-        # Answer section with dynamic key based on question number
-        user_answer = st.text_input(
-            "Enter your answer:", 
-            key=f"answer_input_{st.session_state.question_number}"
-        )
         
-        if st.button("Submit Answer", type="primary"):
-            final_time = int(time.time() - st.session_state.timer_start)
-            is_correct = check_answer(user_answer, st.session_state.current_question["answer"])
+        if not st.session_state.show_explanation:
+            # Answer section with dynamic key based on question number
+            user_answer = st.text_input(
+                "Enter your answer:", 
+                key=f"answer_input_{st.session_state.question_number}",
+                help="Type your answer and press Enter or click Submit"
+            )
             
-            if is_correct:
-                st.success(f"🎉 Excellent! Your answer is correct! Time taken: {format_time(final_time)}")
-                st.session_state.score += 1
-            else:
-                st.error(f"📝 Not quite right. The correct answer is {st.session_state.current_question['answer']}. Time taken: {format_time(final_time)}")
-            
-            st.session_state.total_questions += 1
-            st.session_state.show_explanation = True
-            st.session_state.timer_start = None
-    
-    # Show explanation and next button
-    if st.session_state.show_explanation:
-        st.markdown("""
-            <div class='explanation-card'>
-                <h3>Explanation</h3>
-                <p>{}</p>
-            </div>
-        """.format(st.session_state.current_question["explanation"]), unsafe_allow_html=True)
+            if st.button("Submit Answer", type="primary", use_container_width=True):
+                final_time = int(time.time() - st.session_state.timer_start)
+                is_correct = check_answer(user_answer, st.session_state.current_question["answer"])
+                
+                if is_correct:
+                    st.success(f"🎉 Excellent! Your answer is correct! Time: {format_time(final_time)}")
+                    st.session_state.score += 1
+                else:
+                    st.error(f"📝 Not quite right. Answer: {st.session_state.current_question['answer']}. Time: {format_time(final_time)}")
+                
+                st.session_state.total_questions += 1
+                st.session_state.show_explanation = True
+                st.session_state.timer_start = None
         
-        if st.button("Next Question", type="primary", on_click=next_question):
-            pass
+        # Show explanation and next button
+        if st.session_state.show_explanation:
+            explanation_text = st.session_state.current_question.get("explanation", "")
+            if explanation_text:
+                st.markdown(f"""
+                    <div class='explanation-card'>
+                        <h3>Explanation</h3>
+                        <p style='line-height: 1.5;'>{explanation_text}</p>
+                    </div>
+                """, unsafe_allow_html=True)
+            
+            if st.button("Next Question", type="primary", use_container_width=True):
+                next_question()
+                st.rerun()
+    except Exception as e:
+        st.error(f"An error occurred: {str(e)}. Generating new question...")
+        next_question()
+        st.rerun()
 
 # Sidebar with statistics
 st.sidebar.markdown("### Your Progress")
