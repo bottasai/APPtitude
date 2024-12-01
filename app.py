@@ -1,18 +1,23 @@
 import os
-from flask import Flask, request, jsonify, render_template
+from flask import Flask, render_template, request, jsonify
 from openai import OpenAI
-from dotenv import load_dotenv
 import json
-
-# Load environment variables
-load_dotenv()
+import streamlit as st
 
 app = Flask(__name__)
 
-# Initialize X.AI client
+# Initialize OpenAI client
+if st.secrets and 'XAI_API_KEY' in st.secrets:
+    api_key = st.secrets['XAI_API_KEY']
+else:
+    api_key = os.getenv('XAI_API_KEY')
+
+if not api_key:
+    raise ValueError("API key not found. Please set XAI_API_KEY in environment variables or Streamlit secrets.")
+
 client = OpenAI(
-    api_key=os.getenv("XAI_API_KEY"),
-    base_url="https://api.x.ai/v1",
+    api_key=api_key,
+    base_url="https://api.x.ai/v1"
 )
 
 def generate_question(level):
