@@ -98,6 +98,9 @@ def check_answer(user_answer, correct_answer):
         # If answers can't be converted to float, use string comparison
         return user_answer.strip().lower() == correct_answer.strip().lower()
 
+def reset_answer_field():
+    st.session_state.answer_input = ""
+
 # Streamlit UI
 st.set_page_config(
     page_title="APPtitude - Quantitative Aptitude Practice",
@@ -171,6 +174,8 @@ if 'timer_start' not in st.session_state:
     st.session_state.timer_start = None
 if 'loading_question' not in st.session_state:
     st.session_state.loading_question = False
+if 'answer_input' not in st.session_state:
+    st.session_state.answer_input = ""
 
 # Level selection dropdown
 levels = {
@@ -193,6 +198,7 @@ if selected_level != st.session_state.difficulty:
     st.session_state.current_question = None
     st.session_state.show_explanation = False
     st.session_state.timer_start = None
+    reset_answer_field()
 
 # Main content area
 st.markdown("---")
@@ -218,6 +224,7 @@ if not st.session_state.current_question:
         st.session_state.current_question = generate_question(st.session_state.difficulty)
         st.session_state.timer_start = time.time()
         st.session_state.loading_question = False
+        reset_answer_field()
         st.rerun()
 
 # Display current question and timer
@@ -241,7 +248,8 @@ if st.session_state.current_question:
     
     if not st.session_state.show_explanation:
         # Answer section
-        user_answer = st.text_input("Enter your answer:", key="answer_input")
+        user_answer = st.text_input("Enter your answer:", key="answer_input", value=st.session_state.answer_input)
+        st.session_state.answer_input = user_answer  # Update session state with current input
         
         if st.button("Submit Answer", type="primary"):
             final_time = int(time.time() - st.session_state.timer_start)
@@ -272,6 +280,7 @@ if st.session_state.current_question:
             st.session_state.show_explanation = False
             st.session_state.timer_start = time.time()
             st.session_state.loading_question = False
+            reset_answer_field()
             st.rerun()
 
 # Sidebar with statistics
@@ -309,6 +318,7 @@ if st.sidebar.button("Reset Progress", type="secondary"):
     st.session_state.current_question = None
     st.session_state.show_explanation = False
     st.session_state.timer_start = None
+    reset_answer_field()
     st.rerun()
 
 # Tips section in sidebar
