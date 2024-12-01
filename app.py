@@ -1,12 +1,12 @@
 import os
 from flask import Flask, render_template, request, jsonify
-from openai import OpenAI
 import json
+import requests
 import streamlit as st
 
 app = Flask(__name__)
 
-# Initialize OpenAI client
+# Get API key from environment or secrets
 if st.secrets and 'XAI_API_KEY' in st.secrets:
     api_key = st.secrets['XAI_API_KEY']
 else:
@@ -15,40 +15,49 @@ else:
 if not api_key:
     raise ValueError("API key not found. Please set XAI_API_KEY in environment variables or Streamlit secrets.")
 
-client = OpenAI(
-    api_key=api_key,
-    base_url="https://api.x.ai/v1"
-)
+# X.AI API configuration
+XAI_BASE_URL = "https://api.x.ai/v1"
+headers = {
+    "Authorization": f"Bearer {api_key}",
+    "Content-Type": "application/json"
+}
 
 def generate_question(level):
     """Generate a question based on the difficulty level"""
     try:
         # First try to generate a question using X.AI
-        completion = client.chat.completions.create(
-            model="grok-beta",
-            messages=[
-                {"role": "system", "content": "You are APPtitude, an intelligent math teacher. Generate a mental math question suitable for the given difficulty level (1-5)."},
-                {"role": "user", "content": f"Generate a mental math question for difficulty level {level} (1=easiest, 5=hardest). Return ONLY a JSON object with the following format: {{\"question\": \"question text\", \"answer\": \"numerical answer\", \"explanation\": \"step-by-step solution\"}}"}
-            ]
+        response = requests.post(
+            f"{XAI_BASE_URL}/chat/completions",
+            headers=headers,
+            json={
+                "model": "grok-beta",
+                "messages": [
+                    {"role": "system", "content": "You are APPtitude, an intelligent math teacher. Generate a mental math question suitable for the given difficulty level (1-5)."},
+                    {"role": "user", "content": f"Generate a mental math question for difficulty level {level} (1=easiest, 5=hardest). Return ONLY a JSON object with the following format: {{\"question\": \"question text\", \"answer\": \"numerical answer\", \"explanation\": \"step-by-step solution\"}}"}
+                ]
+            }
         )
         
-        response = completion.choices[0].message.content.strip()
-        print(f"API Response: {response}")  # Debug log
+        response.raise_for_status()  # Raise exception for bad status codes
+        data = response.json()
         
-        # Try to extract JSON from the response
-        try:
-            # Find the JSON object in the response
-            start = response.find('{')
-            end = response.rfind('}') + 1
-            if start != -1 and end != -1:
-                json_str = response[start:end]
-                parsed_response = json.loads(json_str)
-                if all(key in parsed_response for key in ["question", "answer", "explanation"]):
-                    return json.dumps(parsed_response)
-            raise Exception("Invalid response format")
-        except (json.JSONDecodeError, ValueError) as e:
-            print(f"JSON parsing error: {str(e)}")
-            raise Exception("Invalid response format")
+        if 'choices' in data and len(data['choices']) > 0:
+            content = data['choices'][0]['message']['content'].strip()
+            
+            # Try to extract JSON from the response
+            try:
+                # Find the JSON object in the response
+                start = content.find('{')
+                end = content.rfind('}') + 1
+                if start != -1 and end != -1:
+                    json_str = content[start:end]
+                    parsed_response = json.loads(json_str)
+                    if all(key in parsed_response for key in ["question", "answer", "explanation"]):
+                        return json.dumps(parsed_response)
+                raise Exception("Invalid response format")
+            except (json.JSONDecodeError, ValueError) as e:
+                print(f"JSON parsing error: {str(e)}")
+                raise Exception("Invalid response format")
         
     except Exception as e:
         print(f"Error generating question: {str(e)}")
@@ -87,41 +96,48 @@ def check_answer(question, user_answer, correct_answer, explanation):
     """Check if the user's answer is correct"""
     try:
         # First try to validate using X.AI
-        completion = client.chat.completions.create(
-            model="grok-beta",
-            messages=[
-                {"role": "system", "content": "You are APPtitude, an intelligent math teacher evaluating student answers."},
-                {"role": "user", "content": f"""Question: {question}
-                User's answer: {user_answer}
-                Correct answer: {correct_answer}
-                
-                Evaluate if the user's answer is correct and return ONLY a JSON object with this format:
-                {{
-                    "is_correct": true/false,
-                    "feedback": "explanation of why correct/incorrect",
-                    "correct_answer": "{correct_answer}",
-                    "explanation": "{explanation}"
-                }}"""}
-            ]
+        response = requests.post(
+            f"{XAI_BASE_URL}/chat/completions",
+            headers=headers,
+            json={
+                "model": "grok-beta",
+                "messages": [
+                    {"role": "system", "content": "You are APPtitude, an intelligent math teacher evaluating student answers."},
+                    {"role": "user", "content": f"""Question: {question}
+                    User's answer: {user_answer}
+                    Correct answer: {correct_answer}
+                    
+                    Evaluate if the user's answer is correct and return ONLY a JSON object with this format:
+                    {{
+                        "is_correct": true/false,
+                        "feedback": "explanation of why correct/incorrect",
+                        "correct_answer": "{correct_answer}",
+                        "explanation": "{explanation}"
+                    }}"""}
+                ]
+            }
         )
         
-        response = completion.choices[0].message.content.strip()
-        print(f"API Response: {response}")  # Debug log
+        response.raise_for_status()  # Raise exception for bad status codes
+        data = response.json()
         
-        # Try to extract JSON from the response
-        try:
-            # Find the JSON object in the response
-            start = response.find('{')
-            end = response.rfind('}') + 1
-            if start != -1 and end != -1:
-                json_str = response[start:end]
-                parsed_response = json.loads(json_str)
-                if all(key in parsed_response for key in ["is_correct", "feedback", "correct_answer", "explanation"]):
-                    return json.dumps(parsed_response)
-            raise Exception("Invalid response format")
-        except (json.JSONDecodeError, ValueError) as e:
-            print(f"JSON parsing error: {str(e)}")
-            raise Exception("Invalid response format")
+        if 'choices' in data and len(data['choices']) > 0:
+            content = data['choices'][0]['message']['content'].strip()
+            
+            # Try to extract JSON from the response
+            try:
+                # Find the JSON object in the response
+                start = content.find('{')
+                end = content.rfind('}') + 1
+                if start != -1 and end != -1:
+                    json_str = content[start:end]
+                    parsed_response = json.loads(json_str)
+                    if all(key in parsed_response for key in ["is_correct", "feedback", "correct_answer", "explanation"]):
+                        return json.dumps(parsed_response)
+                raise Exception("Invalid response format")
+            except (json.JSONDecodeError, ValueError) as e:
+                print(f"JSON parsing error: {str(e)}")
+                raise Exception("Invalid response format")
         
     except Exception as e:
         print(f"Error checking answer: {str(e)}")
@@ -155,67 +171,32 @@ def check_answer(question, user_answer, correct_answer, explanation):
             return json.dumps(response)
 
 @app.route('/')
-def home():
+def index():
     return render_template('index.html')
 
 @app.route('/get_question', methods=['POST'])
 def get_question():
     try:
-        level = request.json.get('level', 1)
-        response = generate_question(level)
-        
-        # Ensure response is proper JSON
-        if isinstance(response, str):
-            try:
-                json.loads(response)  # Validate JSON
-            except json.JSONDecodeError:
-                return jsonify({
-                    "status": "error",
-                    "message": "Invalid response format"
-                }), 500
-        
-        return jsonify({
-            "status": "success",
-            "data": response
-        })
+        data = request.get_json()
+        level = data.get('level', 1)
+        question_data = generate_question(level)
+        return jsonify({"status": "success", "data": question_data})
     except Exception as e:
-        print(f"Error in get_question: {str(e)}")
-        return jsonify({
-            "status": "error",
-            "message": str(e)
-        }), 500
+        return jsonify({"status": "error", "message": str(e)}), 500
 
 @app.route('/check_answer', methods=['POST'])
 def validate_answer():
     try:
-        data = request.json
-        response = check_answer(
+        data = request.get_json()
+        result = check_answer(
             data.get('question'),
             data.get('user_answer'),
             data.get('correct_answer'),
             data.get('explanation')
         )
-        
-        # Ensure response is proper JSON
-        if isinstance(response, str):
-            try:
-                json.loads(response)  # Validate JSON
-            except json.JSONDecodeError:
-                return jsonify({
-                    "status": "error",
-                    "message": "Invalid response format"
-                }), 500
-        
-        return jsonify({
-            "status": "success",
-            "data": response
-        })
+        return jsonify({"status": "success", "data": result})
     except Exception as e:
-        print(f"Error in validate_answer: {str(e)}")
-        return jsonify({
-            "status": "error",
-            "message": str(e)
-        }), 500
+        return jsonify({"status": "error", "message": str(e)}), 500
 
 if __name__ == '__main__':
     app.run(debug=True, port=5001)
