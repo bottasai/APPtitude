@@ -98,49 +98,121 @@ def check_answer(user_answer, correct_answer):
         return user_answer.strip().lower() == correct_answer.strip().lower()
 
 # Streamlit UI
+st.set_page_config(
+    page_title="APPtitude - Mental Math Practice",
+    page_icon="🧮",
+    layout="centered"
+)
+
+# Custom CSS for better styling
+st.markdown("""
+    <style>
+    .main {
+        padding: 2rem;
+    }
+    .stButton>button {
+        width: 100%;
+        margin-top: 1rem;
+    }
+    .difficulty-section {
+        padding: 1rem;
+        background-color: #f0f2f6;
+        border-radius: 0.5rem;
+        margin-bottom: 1rem;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
 st.title("APPtitude - Mental Math Practice")
 st.write("Improve your mental math skills with adaptive challenges!")
 
-# Sidebar for difficulty selection
-difficulty = st.sidebar.slider("Select Difficulty Level", 1, 5, 1)
+# Level selection in main content area
+st.markdown("### Select Difficulty Level")
+col1, col2, col3, col4, col5 = st.columns(5)
 
-# Initialize session state
+# Initialize difficulty in session state if not present
+if 'difficulty' not in st.session_state:
+    st.session_state.difficulty = 1
+
+# Create level buttons
+with col1:
+    if st.button("Level 1", type="primary" if st.session_state.difficulty == 1 else "secondary"):
+        st.session_state.difficulty = 1
+with col2:
+    if st.button("Level 2", type="primary" if st.session_state.difficulty == 2 else "secondary"):
+        st.session_state.difficulty = 2
+with col3:
+    if st.button("Level 3", type="primary" if st.session_state.difficulty == 3 else "secondary"):
+        st.session_state.difficulty = 3
+with col4:
+    if st.button("Level 4", type="primary" if st.session_state.difficulty == 4 else "secondary"):
+        st.session_state.difficulty = 4
+with col5:
+    if st.button("Level 5", type="primary" if st.session_state.difficulty == 5 else "secondary"):
+        st.session_state.difficulty = 5
+
+st.markdown(f"**Current Level: {st.session_state.difficulty}**")
+
+# Initialize session state for game management
 if 'current_question' not in st.session_state:
     st.session_state.current_question = None
 if 'score' not in st.session_state:
     st.session_state.score = 0
 if 'total_questions' not in st.session_state:
     st.session_state.total_questions = 0
+if 'show_explanation' not in st.session_state:
+    st.session_state.show_explanation = False
 
-# New Question button
-if st.button("New Question"):
-    st.session_state.current_question = generate_question(difficulty)
+# Question section
+st.markdown("---")
+if st.button("Get New Question"):
+    st.session_state.current_question = generate_question(st.session_state.difficulty)
+    st.session_state.show_explanation = False
 
-# Display current question
 if st.session_state.current_question:
-    st.write("### Question:")
-    st.write(st.session_state.current_question["question"])
+    st.markdown("### Question")
+    st.markdown(f"**{st.session_state.current_question['question']}**")
     
-    # Get user answer
-    user_answer = st.text_input("Your Answer:")
+    # Answer section
+    user_answer = st.text_input("Your Answer:", key="answer_input")
     
-    if st.button("Submit Answer"):
-        is_correct = check_answer(user_answer, st.session_state.current_question["answer"])
-        
-        if is_correct:
-            st.success("Correct! Well done! ")
-            st.session_state.score += 1
-        else:
-            st.error(f"Sorry, that's not correct. The correct answer is {st.session_state.current_question['answer']}")
-        
-        st.session_state.total_questions += 1
-        
-        # Show explanation
-        st.write("### Explanation:")
-        st.write(st.session_state.current_question["explanation"])
+    col1, col2 = st.columns(2)
+    with col1:
+        if st.button("Submit Answer"):
+            is_correct = check_answer(user_answer, st.session_state.current_question["answer"])
+            
+            if is_correct:
+                st.success(" Correct! Well done!")
+                st.session_state.score += 1
+            else:
+                st.error(f" Sorry, that's not correct. The correct answer is {st.session_state.current_question['answer']}")
+            
+            st.session_state.total_questions += 1
+            st.session_state.show_explanation = True
+    
+    with col2:
+        if st.button("Skip Question"):
+            st.session_state.show_explanation = True
+            st.session_state.total_questions += 1
+    
+    # Show explanation when answer is submitted or question is skipped
+    if st.session_state.show_explanation:
+        st.markdown("### Explanation")
+        st.markdown(st.session_state.current_question["explanation"])
 
-# Display score
+# Display score in sidebar
+st.sidebar.markdown("### Your Progress")
 if st.session_state.total_questions > 0:
-    st.sidebar.write(f"Score: {st.session_state.score}/{st.session_state.total_questions}")
+    st.sidebar.markdown(f"**Score:** {st.session_state.score}/{st.session_state.total_questions}")
     accuracy = (st.session_state.score / st.session_state.total_questions) * 100
-    st.sidebar.write(f"Accuracy: {accuracy:.1f}%")
+    st.sidebar.markdown(f"**Accuracy:** {accuracy:.1f}%")
+    
+    # Progress bar
+    st.sidebar.progress(st.session_state.score / st.session_state.total_questions)
+
+# Reset button in sidebar
+if st.sidebar.button("Reset Progress"):
+    st.session_state.score = 0
+    st.session_state.total_questions = 0
+    st.session_state.current_question = None
+    st.session_state.show_explanation = False
