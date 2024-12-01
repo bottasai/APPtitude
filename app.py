@@ -1,10 +1,7 @@
 import os
-from flask import Flask, render_template, request, jsonify
-import json
-import requests
 import streamlit as st
-
-app = Flask(__name__)
+import requests
+import json
 
 # Get API key from environment or secrets
 if st.secrets and 'XAI_API_KEY' in st.secrets:
@@ -13,7 +10,8 @@ else:
     api_key = os.getenv('XAI_API_KEY')
 
 if not api_key:
-    raise ValueError("API key not found. Please set XAI_API_KEY in environment variables or Streamlit secrets.")
+    st.error("API key not found. Please set XAI_API_KEY in environment variables or Streamlit secrets.")
+    st.stop()
 
 # X.AI API configuration
 XAI_BASE_URL = "https://api.x.ai/v1"
@@ -38,29 +36,24 @@ def generate_question(level):
             }
         )
         
-        response.raise_for_status()  # Raise exception for bad status codes
+        response.raise_for_status()
         data = response.json()
         
         if 'choices' in data and len(data['choices']) > 0:
             content = data['choices'][0]['message']['content'].strip()
-            
-            # Try to extract JSON from the response
             try:
-                # Find the JSON object in the response
                 start = content.find('{')
                 end = content.rfind('}') + 1
                 if start != -1 and end != -1:
                     json_str = content[start:end]
                     parsed_response = json.loads(json_str)
                     if all(key in parsed_response for key in ["question", "answer", "explanation"]):
-                        return json.dumps(parsed_response)
+                        return parsed_response
                 raise Exception("Invalid response format")
             except (json.JSONDecodeError, ValueError) as e:
-                print(f"JSON parsing error: {str(e)}")
                 raise Exception("Invalid response format")
         
     except Exception as e:
-        print(f"Error generating question: {str(e)}")
         # Use fallback questions when API fails
         fallback_questions = [
             {
@@ -89,114 +82,65 @@ def generate_question(level):
                 "explanation": "Fuel needed = (250 km × 6 L) ÷ 100 km = 15 liters"
             }
         ]
-        fallback = fallback_questions[level % len(fallback_questions)]
-        return json.dumps(fallback)
+        return fallback_questions[level % len(fallback_questions)]
 
-def check_answer(question, user_answer, correct_answer, explanation):
+def check_answer(user_answer, correct_answer):
     """Check if the user's answer is correct"""
     try:
-        # First try to validate using X.AI
-        response = requests.post(
-            f"{XAI_BASE_URL}/chat/completions",
-            headers=headers,
-            json={
-                "model": "grok-beta",
-                "messages": [
-                    {"role": "system", "content": "You are APPtitude, an intelligent math teacher evaluating student answers."},
-                    {"role": "user", "content": f"""Question: {question}
-                    User's answer: {user_answer}
-                    Correct answer: {correct_answer}
-                    
-                    Evaluate if the user's answer is correct and return ONLY a JSON object with this format:
-                    {{
-                        "is_correct": true/false,
-                        "feedback": "explanation of why correct/incorrect",
-                        "correct_answer": "{correct_answer}",
-                        "explanation": "{explanation}"
-                    }}"""}
-                ]
-            }
-        )
+        # Try to convert answers to floats for numerical comparison
+        user_float = float(user_answer.replace('$', '').strip())
+        correct_float = float(correct_answer.replace('$', '').strip())
         
-        response.raise_for_status()  # Raise exception for bad status codes
-        data = response.json()
+        # Check if answers are equal (with small tolerance for floating point)
+        return abs(user_float - correct_float) < 0.01
+    except ValueError:
+        # If answers can't be converted to float, use string comparison
+        return user_answer.strip().lower() == correct_answer.strip().lower()
+
+# Streamlit UI
+st.title("APPtitude - Mental Math Practice")
+st.write("Improve your mental math skills with adaptive challenges!")
+
+# Sidebar for difficulty selection
+difficulty = st.sidebar.slider("Select Difficulty Level", 1, 5, 1)
+
+# Initialize session state
+if 'current_question' not in st.session_state:
+    st.session_state.current_question = None
+if 'score' not in st.session_state:
+    st.session_state.score = 0
+if 'total_questions' not in st.session_state:
+    st.session_state.total_questions = 0
+
+# New Question button
+if st.button("New Question"):
+    st.session_state.current_question = generate_question(difficulty)
+
+# Display current question
+if st.session_state.current_question:
+    st.write("### Question:")
+    st.write(st.session_state.current_question["question"])
+    
+    # Get user answer
+    user_answer = st.text_input("Your Answer:")
+    
+    if st.button("Submit Answer"):
+        is_correct = check_answer(user_answer, st.session_state.current_question["answer"])
         
-        if 'choices' in data and len(data['choices']) > 0:
-            content = data['choices'][0]['message']['content'].strip()
-            
-            # Try to extract JSON from the response
-            try:
-                # Find the JSON object in the response
-                start = content.find('{')
-                end = content.rfind('}') + 1
-                if start != -1 and end != -1:
-                    json_str = content[start:end]
-                    parsed_response = json.loads(json_str)
-                    if all(key in parsed_response for key in ["is_correct", "feedback", "correct_answer", "explanation"]):
-                        return json.dumps(parsed_response)
-                raise Exception("Invalid response format")
-            except (json.JSONDecodeError, ValueError) as e:
-                print(f"JSON parsing error: {str(e)}")
-                raise Exception("Invalid response format")
+        if is_correct:
+            st.success("Correct! Well done! ")
+            st.session_state.score += 1
+        else:
+            st.error(f"Sorry, that's not correct. The correct answer is {st.session_state.current_question['answer']}")
         
-    except Exception as e:
-        print(f"Error checking answer: {str(e)}")
-        # Fallback to simple validation
-        try:
-            # Try to convert answers to floats for numerical comparison
-            user_float = float(user_answer.replace('$', '').strip())
-            correct_float = float(correct_answer.replace('$', '').strip())
-            
-            # Check if answers are equal (with small tolerance for floating point)
-            is_correct = abs(user_float - correct_float) < 0.01
-            
-            response = {
-                "is_correct": is_correct,
-                "feedback": "Correct! Well done!" if is_correct else "Sorry, that's not correct.",
-                "correct_answer": correct_answer,
-                "explanation": explanation
-            }
-            
-            return json.dumps(response)
-            
-        except ValueError:
-            # If answers can't be converted to float, use string comparison
-            is_correct = user_answer.strip().lower() == correct_answer.strip().lower()
-            response = {
-                "is_correct": is_correct,
-                "feedback": "Correct! Well done!" if is_correct else "Sorry, that's not correct.",
-                "correct_answer": correct_answer,
-                "explanation": explanation
-            }
-            return json.dumps(response)
+        st.session_state.total_questions += 1
+        
+        # Show explanation
+        st.write("### Explanation:")
+        st.write(st.session_state.current_question["explanation"])
 
-@app.route('/')
-def index():
-    return render_template('index.html')
-
-@app.route('/get_question', methods=['POST'])
-def get_question():
-    try:
-        data = request.get_json()
-        level = data.get('level', 1)
-        question_data = generate_question(level)
-        return jsonify({"status": "success", "data": question_data})
-    except Exception as e:
-        return jsonify({"status": "error", "message": str(e)}), 500
-
-@app.route('/check_answer', methods=['POST'])
-def validate_answer():
-    try:
-        data = request.get_json()
-        result = check_answer(
-            data.get('question'),
-            data.get('user_answer'),
-            data.get('correct_answer'),
-            data.get('explanation')
-        )
-        return jsonify({"status": "success", "data": result})
-    except Exception as e:
-        return jsonify({"status": "error", "message": str(e)}), 500
-
-if __name__ == '__main__':
-    app.run(debug=True, port=5001)
+# Display score
+if st.session_state.total_questions > 0:
+    st.sidebar.write(f"Score: {st.session_state.score}/{st.session_state.total_questions}")
+    accuracy = (st.session_state.score / st.session_state.total_questions) * 100
+    st.sidebar.write(f"Accuracy: {accuracy:.1f}%")
