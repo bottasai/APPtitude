@@ -2,6 +2,7 @@ import os
 import streamlit as st
 import requests
 import json
+import time
 
 # Get API key from environment or secrets
 if st.secrets and 'XAI_API_KEY' in st.secrets:
@@ -115,13 +116,6 @@ st.markdown("""
         height: 3rem;
         margin-top: 0.5rem;
     }
-    .level-button {
-        background-color: #f0f2f6;
-        border-radius: 0.5rem;
-        padding: 1rem;
-        text-align: center;
-        margin: 0.5rem;
-    }
     .question-card {
         background-color: white;
         padding: 2rem;
@@ -135,23 +129,21 @@ st.markdown("""
         border-radius: 0.5rem;
         margin-top: 1rem;
     }
-    .header-container {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        margin-bottom: 2rem;
-    }
-    h1 {
+    .timer {
+        font-size: 1.5rem;
+        font-weight: bold;
         color: #1f2937;
-        font-size: 2.5rem !important;
+        text-align: center;
+        padding: 1rem;
+        background-color: #f0f2f6;
+        border-radius: 0.5rem;
+        margin: 1rem 0;
     }
-    h3 {
-        color: #374151;
-        margin-bottom: 1rem !important;
-    }
-    .stTextInput>div>div>input {
+    .loading {
+        text-align: center;
+        padding: 2rem;
         font-size: 1.2rem;
-        padding: 0.75rem !important;
+        color: #6b7280;
     }
     </style>
     """, unsafe_allow_html=True)
@@ -162,36 +154,9 @@ with col1:
     st.title("APPtitude - Quantitative Aptitude Practice")
     st.markdown("Master quantitative concepts through interactive practice: Time & Distance, Profit & Loss, Measurements, Number Series, and more!")
 
-# Level selection with better visual feedback
-st.markdown("### Choose Your Difficulty Level")
-col1, col2, col3, col4, col5 = st.columns(5)
-
-# Initialize difficulty in session state if not present
+# Initialize session state
 if 'difficulty' not in st.session_state:
     st.session_state.difficulty = 1
-
-# Create level buttons with descriptions
-levels = {
-    1: "Basic Calculations",
-    2: "Simple Applications",
-    3: "Complex Problems",
-    4: "Advanced Concepts",
-    5: "Expert Challenges"
-}
-
-for i, (col, (level, desc)) in enumerate(zip([col1, col2, col3, col4, col5], levels.items())):
-    with col:
-        st.markdown(f"""
-            <div class='level-button'>
-                <h4>Level {level}</h4>
-                <p style='font-size: 0.8rem; color: #6b7280;'>{desc}</p>
-            </div>
-        """, unsafe_allow_html=True)
-        if st.button(f"Select Level {level}", key=f"level_{level}", 
-                    type="primary" if st.session_state.difficulty == level else "secondary"):
-            st.session_state.difficulty = level
-
-# Initialize session state
 if 'current_question' not in st.session_state:
     st.session_state.current_question = None
 if 'score' not in st.session_state:
@@ -202,29 +167,71 @@ if 'show_explanation' not in st.session_state:
     st.session_state.show_explanation = False
 if 'rate_limit_error' not in st.session_state:
     st.session_state.rate_limit_error = False
+if 'timer_start' not in st.session_state:
+    st.session_state.timer_start = None
+if 'loading_question' not in st.session_state:
+    st.session_state.loading_question = False
+
+# Level selection dropdown
+levels = {
+    1: "Level 1 - Basic Calculations",
+    2: "Level 2 - Simple Applications",
+    3: "Level 3 - Complex Problems",
+    4: "Level 4 - Advanced Concepts",
+    5: "Level 5 - Expert Challenges"
+}
+
+selected_level = st.selectbox(
+    "Select Difficulty Level",
+    options=list(levels.keys()),
+    format_func=lambda x: levels[x],
+    key="level_selector"
+)
+
+if selected_level != st.session_state.difficulty:
+    st.session_state.difficulty = selected_level
+    st.session_state.current_question = None
+    st.session_state.show_explanation = False
+    st.session_state.timer_start = None
 
 # Main content area
 st.markdown("---")
 
-# Question generation
-col1, col2 = st.columns([3, 1])
-with col1:
-    if st.button("Generate New Question", type="primary"):
-        try:
-            st.session_state.current_question = generate_question(st.session_state.difficulty)
-            st.session_state.show_explanation = False
-            st.session_state.rate_limit_error = False
-        except Exception as e:
-            if "rate limit exceeded" in str(e).lower():
-                st.session_state.rate_limit_error = True
-                st.error("⚠️ Rate limit reached. Using backup questions. Please try again in a few minutes.")
-                # Use a fallback question
-                st.session_state.current_question = generate_question(st.session_state.difficulty)
-            else:
-                st.error(f"Error: {str(e)}")
+# Timer display
+def format_time(seconds):
+    minutes = seconds // 60
+    seconds = seconds % 60
+    return f"{minutes:02d}:{seconds:02d}"
 
-# Display current question
+# Question section
+if st.session_state.loading_question:
+    st.markdown("""
+        <div class='loading'>
+            <p>Loading next question...</p>
+            <div class="stSpinner"></div>
+        </div>
+    """, unsafe_allow_html=True)
+
+if not st.session_state.current_question:
+    if st.button("Start Practice", type="primary"):
+        st.session_state.loading_question = True
+        st.session_state.current_question = generate_question(st.session_state.difficulty)
+        st.session_state.timer_start = time.time()
+        st.session_state.loading_question = False
+        st.rerun()
+
+# Display current question and timer
 if st.session_state.current_question:
+    # Display timer
+    if st.session_state.timer_start and not st.session_state.show_explanation:
+        elapsed_time = int(time.time() - st.session_state.timer_start)
+        st.markdown(f"""
+            <div class='timer'>
+                ⏱️ Time Elapsed: {format_time(elapsed_time)}
+            </div>
+        """, unsafe_allow_html=True)
+    
+    # Display question
     st.markdown("""
         <div class='question-card'>
             <h3>Question</h3>
@@ -232,31 +239,25 @@ if st.session_state.current_question:
         </div>
     """.format(st.session_state.current_question["question"]), unsafe_allow_html=True)
     
-    # Answer section
-    col1, col2 = st.columns([3, 1])
-    with col1:
+    if not st.session_state.show_explanation:
+        # Answer section
         user_answer = st.text_input("Enter your answer:", key="answer_input")
-    
-    col1, col2 = st.columns(2)
-    with col1:
+        
         if st.button("Submit Answer", type="primary"):
+            final_time = int(time.time() - st.session_state.timer_start)
             is_correct = check_answer(user_answer, st.session_state.current_question["answer"])
             
             if is_correct:
-                st.success("🎉 Excellent! Your answer is correct!")
+                st.success(f"🎉 Excellent! Your answer is correct! Time taken: {format_time(final_time)}")
                 st.session_state.score += 1
             else:
-                st.error(f"📝 Not quite right. The correct answer is {st.session_state.current_question['answer']}")
+                st.error(f"📝 Not quite right. The correct answer is {st.session_state.current_question['answer']}. Time taken: {format_time(final_time)}")
             
             st.session_state.total_questions += 1
             st.session_state.show_explanation = True
+            st.session_state.timer_start = None
     
-    with col2:
-        if st.button("Skip Question", type="secondary"):
-            st.session_state.show_explanation = True
-            st.session_state.total_questions += 1
-    
-    # Show explanation
+    # Show explanation and next button
     if st.session_state.show_explanation:
         st.markdown("""
             <div class='explanation-card'>
@@ -264,6 +265,14 @@ if st.session_state.current_question:
                 <p>{}</p>
             </div>
         """.format(st.session_state.current_question["explanation"]), unsafe_allow_html=True)
+        
+        if st.button("Next Question", type="primary"):
+            st.session_state.loading_question = True
+            st.session_state.current_question = generate_question(st.session_state.difficulty)
+            st.session_state.show_explanation = False
+            st.session_state.timer_start = time.time()
+            st.session_state.loading_question = False
+            st.rerun()
 
 # Sidebar with statistics
 st.sidebar.markdown("### Your Progress")
@@ -299,6 +308,7 @@ if st.sidebar.button("Reset Progress", type="secondary"):
     st.session_state.total_questions = 0
     st.session_state.current_question = None
     st.session_state.show_explanation = False
+    st.session_state.timer_start = None
     st.rerun()
 
 # Tips section in sidebar
