@@ -535,6 +535,72 @@ st.markdown("""
     .stMarkdown {
         color: #1f2937 !important;
     }
+    .stAlert {
+        background-color: #ffffff !important;
+        border-radius: 0.5rem !important;
+        padding: 0.75rem !important;
+        margin: 0.5rem 0 !important;
+        border: 1px solid rgba(0, 0, 0, 0.1) !important;
+    }
+    
+    .stAlert > div {
+        min-height: unset !important;
+        padding: 0.5rem !important;
+        display: flex !important;
+        align-items: center !important;
+    }
+    
+    /* Success message styling */
+    .element-container:has(div[data-testid="stMarkdownContainer"]:has(div[class*="stAlert"][data-baseweb="notification"][kind="success"])) {
+        background-color: #ecfdf5 !important;
+        padding: 1rem !important;
+        border-radius: 0.5rem !important;
+        margin: 0.5rem 0 !important;
+    }
+    
+    .element-container:has(div[data-testid="stMarkdownContainer"]:has(div[class*="stAlert"][data-baseweb="notification"][kind="success"])) p {
+        color: #065f46 !important;
+        font-weight: 500 !important;
+        font-size: 1.1rem !important;
+    }
+    
+    /* Error message styling */
+    .element-container:has(div[data-testid="stMarkdownContainer"]:has(div[class*="stAlert"][data-baseweb="notification"][kind="error"])) {
+        background-color: #fef2f2 !important;
+        padding: 1rem !important;
+        border-radius: 0.5rem !important;
+        margin: 0.5rem 0 !important;
+    }
+    
+    .element-container:has(div[data-testid="stMarkdownContainer"]:has(div[class*="stAlert"][data-baseweb="notification"][kind="error"])) p {
+        color: #991b1b !important;
+        font-weight: 500 !important;
+        font-size: 1.1rem !important;
+    }
+    
+    /* Mobile-specific adjustments */
+    @media (max-width: 768px) {
+        .stAlert {
+            margin: 0.25rem 0 !important;
+            padding: 0.5rem !important;
+        }
+        
+        .element-container:has(div[data-testid="stMarkdownContainer"]:has(div[class*="stAlert"])) p {
+            font-size: 1rem !important;
+            line-height: 1.4 !important;
+        }
+        
+        /* Increase contrast for better readability */
+        .element-container:has(div[data-testid="stMarkdownContainer"]:has(div[class*="stAlert"][data-baseweb="notification"][kind="success"])) p {
+            color: #064e3b !important;
+            text-shadow: 0 0 1px rgba(255, 255, 255, 0.5) !important;
+        }
+        
+        .element-container:has(div[data-testid="stMarkdownContainer"]:has(div[class*="stAlert"][data-baseweb="notification"][kind="error"])) p {
+            color: #7f1d1d !important;
+            text-shadow: 0 0 1px rgba(255, 255, 255, 0.5) !important;
+        }
+    }
     </style>
     """, unsafe_allow_html=True)
 
